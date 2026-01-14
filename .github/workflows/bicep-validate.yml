@@ -1,0 +1,89 @@
+name: Bicep Validation
+run-name: Validate and lint Bicep templates
+
+on:
+  workflow_call:
+    inputs:
+      bicep-folder-path:
+        description: 'Path to bicep file'
+        type: string
+        required: true
+        default: 'bicep'
+      template-file:
+        description: 'Template file to validate'
+        type: string
+        required: true
+        default: 'main.bicep'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Validate Bicep syntax
+        shell: pwsh
+        run: |
+          az bicep build --file "${{ inputs.bicep-folder-path }}/${{ inputs.template-file }}" --outdir "${{ inputs.bicep-folder-path }}"
+          Write-Host "✓ Bicep syntax validation passed"
+
+      - name: Lint Bicep files
+        shell: pwsh
+        run: |
+          az bicep lint --file "${{ inputs.bicep-folder-path }}/${{ inputs.template-file }}"
+          Write-Host "✓ Bicep lint validation passed"
+
+      - name: Validate JSON Files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "🔍 Validating JSON files..."
+          
+          # Validate all JSON files in parameters and root bicep folder
+          $jsonFiles = Get-ChildItem -Path "${{ inputs.bicep-folder-path }}" -Include "*.json" -Recurse -File
+          
+          foreach ($file in $jsonFiles) {
+            Write-Host "  Validating: $($file.FullName)"
+            try {
+              $content = Get-Content -Raw $file.FullName | ConvertFrom-Json -ErrorAction Stop
+              Write-Host "  ✓ Valid JSON structure"
+            } catch {
+              Write-Host "  ✗ Invalid JSON: $_"
+              exit 1
+            }
+          }
+          
+          Write-Host "✓ All JSON files are valid"
+
+      - name: Validate Bicep Parameter Files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "🔍 Validating Bicep parameter files..."
+          
+          # Validate all .bicepparam files in parameters folder
+          $paramFiles = Get-ChildItem -Path "${{ inputs.bicep-folder-path }}/parameters" -Filter "*.bicepparam" -File
+          
+          if ($paramFiles.Count -eq 0) {
+            Write-Host "⚠️  No .bicepparam files found to validate"
+            exit 0
+          }
+          
+          foreach ($file in $paramFiles) {
+            Write-Host "  Validating: $($file.Name)"
+            try {
+              az bicep build-params --file $file.FullName --stdout | Out-Null
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ Valid Bicep parameter file"
+              } else {
+                Write-Host "  ✗ Invalid Bicep parameter file"
+                exit 1
+              }
+            } catch {
+              Write-Host "  ✗ Validation failed: $_"
+              exit 1
+            }
+          }
+          
+          Write-Host "✓ All Bicep parameter files are valid ($($paramFiles.Count) files checked)"

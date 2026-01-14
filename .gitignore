@@ -1,0 +1,41 @@
+# Bicep
+*.bicep.json
+bicep/**/*.json
+!bicep/parameters/*.json
+!bicep/variables/*.json
+
+# Parameters with secrets
+bicep/parameters/*.secrets.json
+bicep/parameters/*secret*.json
+
+# Azure
+.azure/
+
+# Build outputs
+bin/
+obj/
+dist/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+.DS_Store
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Deployment outputs
+deployment-output.json
+deployment-output-*.json
+
+# Environment files
+.env
+.env.local
+
+# OS files
+Thumbs.db
+.DS_Store

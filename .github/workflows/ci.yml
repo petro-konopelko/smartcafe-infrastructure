@@ -1,0 +1,340 @@
+# ==================================================
+# SmartCafe Infrastructure Deployment Pipeline
+# ==================================================
+# This workflow implements Azure infrastructure deployment best practices:
+#
+# 1. **Validation**: Reuses bicep-validate.yml for consistent validation
+# 2. **Manual Approval**: Environment-based approval gates for safety
+# 3. **Secure Authentication**: Uses OIDC (OpenID Connect) - no stored credentials
+# 4. **Idempotent Deployment**: Checks if resources exist before creating
+# 5. **What-If Analysis**: Previews changes before applying (Infrastructure as Code best practice)
+# 6. **Deployment Validation**: Post-deployment smoke tests
+# 7. **Comprehensive Logging**: Detailed step summaries and notifications
+#
+# Prerequisites:
+# - Azure Service Principal configured for OIDC authentication
+# - GitHub Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+# - GitHub Secrets: POSTGRES_ADMIN_LOGIN, POSTGRES_ADMIN_PASSWORD
+# - GitHub Environments configured: dev, staging, prod
+# ==================================================
+
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'bicep/**'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/bicep-validate.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      region:
+        description: 'Azure region for deployment'
+        required: true
+        default: 'northeurope'
+        type: choice
+        options:
+          - northeurope
+          - westeurope
+
+permissions:
+  id-token: write   # Required for OIDC authentication
+  contents: read    # Required to checkout code
+
+env:
+  BICEP_PATH: bicep
+  PROJECT_NAME: smartcafe
+  RESOURCE_GROUP_NAME: ${{ inputs.environment }}-rg-${{ inputs.region }}-smartcafe
+
+
+jobs:
+  # Step 1: Validate Bicep templates using reusable workflow
+  validate:
+    name: Validate Bicep Templates
+    uses: ./.github/workflows/bicep-validate.yml
+    with:
+      bicep-folder-path: bicep
+      template-file: main.bicep
+
+  # Step 2: What-If Analysis (preview changes before approval)
+  what-if:
+    name: Preview Deployment Changes
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check Resource Group Status
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "📦 Checking resource group: ${{ env.RESOURCE_GROUP_NAME }}"
+          
+          $rgExists = az group exists --name "${{ env.RESOURCE_GROUP_NAME }}"
+          
+          if ($rgExists -eq "false") {
+            Write-Host "⚠️  Resource group does not exist - this will be a first deployment"
+            Write-Host "Resource group will be created during deployment phase"
+          } else {
+            Write-Host "✓ Resource group exists - analyzing changes to existing resources"
+          }
+
+      - name: Run What-If Analysis
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "🔍 Running What-If analysis for $ENVIRONMENT environment..."
+          Write-Host ""
+          
+          $paramFilePath = "${{ env.BICEP_PATH }}/parameters/${{ inputs.environment }}.bicepparam"
+          
+          if (-not (Test-Path $paramFilePath)) {
+            Write-Host "✗ Parameter file not found: $paramFilePath"
+            exit 1
+          }
+          
+          # Check if resource group exists for What-If
+          $rgExists = az group exists --name "${{ env.RESOURCE_GROUP_NAME }}"
+          
+          if ($rgExists -eq "false") {
+            Write-Host "⚠️  Cannot run What-If on non-existent resource group"
+            Write-Host "Skipping What-If analysis - this will be a complete new deployment"
+            Write-Host ""
+            Write-Host "The following resources will be created:"
+            Write-Host "  - Virtual Network with subnets"
+            Write-Host "  - App Service Plan and App Service"
+            Write-Host "  - PostgreSQL Flexible Server"
+            Write-Host "  - Key Vault"
+            Write-Host "  - Network Security Groups"
+          } else {
+            # Run What-If only if resource group exists
+            az deployment group what-if `
+              --resource-group "${{ env.RESOURCE_GROUP_NAME }}" `
+              --parameters "$paramFilePath" `
+              --parameters `
+                postgresAdminLogin="${{ secrets.POSTGRES_ADMIN_LOGIN }}" `
+                postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}"
+          }
+          
+          Write-Host ""
+          Write-Host "✓ What-If analysis complete - Review changes above before approval"
+
+  # Step 3: Manual approval gate (approver can review What-If results)
+  approval:
+    name: Manual Approval
+    runs-on: ubuntu-latest
+    needs: [what-if]
+    environment: 
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Approval Confirmation
+        run: |
+          echo "✅ Manual approval received for ${{ inputs.environment }} environment"
+          echo "Resource Group: ${{ env.RESOURCE_GROUP_NAME }}"
+          echo "Proceeding with deployment..."
+
+  # Step 4: Deploy infrastructure
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [approval]
+    environment: 
+      name: ${{ inputs.environment }}
+    outputs:
+      appServiceUrl: ${{ steps.deploy.outputs.appServiceUrl }}
+      appServiceHostname: ${{ steps.deploy.outputs.appServiceHostname }}
+      postgresServerFqdn: ${{ steps.deploy.outputs.postgresServerFqdn }}
+      postgresResourceName: ${{ steps.deploy.outputs.postgresResourceName }}
+      keyVaultName: ${{ steps.deploy.outputs.keyVaultName }}
+      keyVaultUri: ${{ steps.deploy.outputs.keyVaultUri }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Step 3: Azure Login using OIDC (most secure method - no secrets stored)
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Step 4: Create Resource Group if it doesn't exist
+      - name: Ensure Resource Group Exists
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "📦 Ensuring resource group exists: ${{ env.RESOURCE_GROUP_NAME }}"
+          
+          $rgExists = az group exists --name "${{ env.RESOURCE_GROUP_NAME }}"
+          
+          if ($rgExists -eq "false") {
+            Write-Host "Creating new resource group..."
+            az group create `
+              --name "${{ env.RESOURCE_GROUP_NAME }}" `
+              --location "${{ inputs.region }}" `
+              --tags Environment="${{ inputs.environment }}" ManagedBy="GitHub-Actions" Project="${{ env.PROJECT_NAME }}" DeployedBy="GitHub-Actions"
+            Write-Host "✓ Resource group created"
+          } else {
+            Write-Host "✓ Resource group already exists"
+          }
+
+      # Step 5: Deploy Bicep template
+      - name: Deploy Infrastructure
+        id: deploy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "🚀 Deploying infrastructure to ${{ inputs.environment }} environment..."
+          
+          $deploymentName = "smartcafe-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          $paramFilePath = "${{ env.BICEP_PATH }}/parameters/${{ inputs.environment }}.bicepparam"
+          
+          $output = az deployment group create `
+            --resource-group "${{ env.RESOURCE_GROUP_NAME }}" `
+            --parameters "$paramFilePath" `
+            --parameters `
+              postgresAdminLogin="${{ secrets.POSTGRES_ADMIN_LOGIN }}" `
+              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" `
+            --name "$deploymentName" `
+            --query properties.outputs `
+            --output json
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "✗ Deployment failed"
+            exit 1
+          }
+          
+          Write-Host "✓ Deployment completed successfully"
+          
+          # Parse and set outputs
+          $outputObj = $output | ConvertFrom-Json
+          "appServiceUrl=$($outputObj.appServiceUrl.value)" >> $env:GITHUB_OUTPUT
+          "postgresServerFqdn=$($outputObj.postgresServerFqdn.value)" >> $env:GITHUB_OUTPUT
+          "keyVaultName=$($outputObj.keyVaultName.value)" >> $env:GITHUB_OUTPUT
+
+      # Deployment validation (best practice: smoke test)
+      - name: Validate Deployment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "🔍 Validating deployed resources..."
+          
+          # Check App Service is running
+          $appName = az webapp list `
+            --resource-group "${{ env.RESOURCE_GROUP_NAME }}" `
+            --query "[0].name" `
+            --output tsv
+          
+          if ([string]::IsNullOrEmpty($appName)) {
+            Write-Host "✗ App Service not found"
+            exit 1
+          }
+          
+          $appState = az webapp show `
+            --name $appName `
+            --resource-group "${{ env.RESOURCE_GROUP_NAME }}" `
+            --query "state" `
+            --output tsv
+          
+          if ($appState -ne "Running") {
+            Write-Host "⚠️  App Service is not running (State: $appState)"
+          } else {
+            Write-Host "✓ App Service is running"
+          }
+          
+          # Check Key Vault is accessible
+          $kvName = "${{ steps.deploy.outputs.keyVaultName }}"
+          $kvStatus = az keyvault show `
+            --name $kvName `
+            --query "properties.provisioningState" `
+            --output tsv
+          
+          if ($kvStatus -eq "Succeeded") {
+            Write-Host "✓ Key Vault is accessible"
+          } else {
+            Write-Host "⚠️  Key Vault status: $kvStatus"
+          }
+          
+          Write-Host "✓ Deployment validation complete"
+
+      # Generate deployment summary
+      - name: Generate Deployment Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $status = "${{ steps.deploy.outcome }}"
+          $icon = if ($status -eq "success") { "✅" } else { "❌" }
+          
+          @"
+          ## $icon Infrastructure Deployment - ${{ inputs.environment }} Environment
+          
+          ### Deployment Details
+          - **Status**: $status
+          - **Environment**: ${{ inputs.environment }}
+          - **Region**: ${{ inputs.region }}
+          - **Resource Group**: ${{ env.RESOURCE_GROUP_NAME }}
+          - **Deployment Time**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
+          
+          ### Deployed Resources
+          - **App Service URL**: ${{ steps.deploy.outputs.appServiceUrl }}
+          - **App Service Hostname**: ${{ steps.deploy.outputs.appServiceHostname }}
+          - **PostgreSQL Server**: ${{ steps.deploy.outputs.postgresServerFqdn }}
+          - **PostgreSQL Resource**: ${{ steps.deploy.outputs.postgresResourceName }}
+          - **Key Vault**: ${{ steps.deploy.outputs.keyVaultName }}
+          - **Key Vault URI**: ${{ steps.deploy.outputs.keyVaultUri }}
+          
+          ### Next Steps
+          1. Deploy application code to App Service
+          2. Run database migrations
+          3. Configure application settings if needed
+          4. Run integration tests
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+  # Notification job (best practice: always notify)
+  notify:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    steps:
+      - name: Deployment Success Notification
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "✅ Infrastructure deployment completed successfully!"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "App Service URL: ${{ needs.deploy.outputs.appServiceUrl }}"
+          echo ""
+          echo "🎉 Deployment successful - ready for application deployment"
+
+      - name: Deployment Failure Notification
+        if: needs.deploy.result == 'failure'
+        run: |
+          echo "❌ Infrastructure deployment failed!"
+          echo "Check the deployment logs for details"
+          echo ""
+          echo "Common issues:"
+          echo "- Check Azure credentials and permissions"
+          echo "- Verify parameter file exists and is valid"
+          echo "- Review Bicep template for errors"
+          echo "- Check resource naming conflicts"
+          exit 1

@@ -1,0 +1,23 @@
+name: Validate Infrastructure (Pull Request)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'bicep/**'
+      - '.github/workflows/pr.yml'
+      - '.github/workflows/bicep-validate.yml'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  
+jobs:
+  validate:
+    name: Validate Bicep Templates
+    uses: ./.github/workflows/bicep-validate.yml
+    with:
+      bicep-folder-path: bicep
+      template-file: main.bicep
