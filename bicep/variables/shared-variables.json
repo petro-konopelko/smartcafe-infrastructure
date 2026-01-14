@@ -1,0 +1,23 @@
+{
+  "projectName": "smartcafe",
+  "environments": {
+    "dev": {
+      "environmentTag": "development",
+      "environmentDisplayName": "Development",
+      "aspnetcoreEnvironment": "Production",
+      "appInsightsRetention": 30
+    },
+    "staging": {
+      "environmentTag": "staging",
+      "environmentDisplayName": "Staging",
+      "aspnetcoreEnvironment": "Production",
+      "appInsightsRetention": 60
+    },
+    "prod": {
+      "environmentTag": "production",
+      "environmentDisplayName": "Production",
+      "aspnetcoreEnvironment": "Production",
+      "appInsightsRetention": 90
+    }
+  }
+}
