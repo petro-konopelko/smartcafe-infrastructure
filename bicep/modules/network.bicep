@@ -58,6 +58,14 @@ resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
         name: appSubnetName
         properties: {
           addressPrefix: networkAddresses.appSubnetPrefix
+          delegations: [
+            {
+              name: 'delegation'
+              properties: {
+                serviceName: 'Microsoft.Web/serverFarms'
+              }
+            }
+          ]
           networkSecurityGroup: {
             id: appNsg.id
           }
