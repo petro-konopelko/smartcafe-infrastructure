@@ -74,7 +74,6 @@ jobs:
     name: Preview Deployment Changes
     runs-on: ubuntu-latest
     needs: validate
-    environment: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -141,24 +140,11 @@ jobs:
           Write-Host ""
           Write-Host "✓ What-If analysis complete - Review changes above before approval"
 
-  # Step 3: Manual approval gate (approver can review What-If results)
-  approval:
-    name: Manual Approval
-    runs-on: ubuntu-latest
-    needs: [what-if]
-    environment: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
-    steps:
-      - name: Approval Confirmation
-        run: |
-          echo "✅ Manual approval received for ${{ env.ENVIRONMENT }} environment"
-          echo "Resource Group: ${{ env.RESOURCE_GROUP_NAME }}"
-          echo "Proceeding with deployment..."
-
   # Step 4: Deploy infrastructure
   deploy:
-    name: Deploy to ${{ inputs.environment || 'dev' }} Environment
+    name: Deploy to ${{ inputs.environment || vars.ENVIRONMENT_DEV }} Environment
     runs-on: ubuntu-latest
-    needs: [approval]
+    needs: what-if
     environment: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
     outputs:
       appServiceUrl: ${{ steps.deploy.outputs.appServiceUrl }}
