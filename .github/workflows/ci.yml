@@ -55,7 +55,9 @@ permissions:
 env:
   BICEP_PATH: bicep
   PROJECT_NAME: smartcafe
-  RESOURCE_GROUP_NAME: ${{ inputs.environment }}-rg-${{ inputs.region }}-smartcafe
+  ENVIRONMENT: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
+  REGION: ${{ inputs.region || vars.DEFAULT_AZURE_REGION }}
+  RESOURCE_GROUP_NAME: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}-rg-${{ inputs.region || vars.DEFAULT_AZURE_REGION }}-smartcafe
 
 
 jobs:
@@ -72,6 +74,7 @@ jobs:
     name: Preview Deployment Changes
     runs-on: ubuntu-latest
     needs: validate
+    environment: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -102,10 +105,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Write-Host "🔍 Running What-If analysis for $ENVIRONMENT environment..."
+          Write-Host "🔍 Running What-If analysis for ${{ env.ENVIRONMENT }} environment..."
           Write-Host ""
           
-          $paramFilePath = "${{ env.BICEP_PATH }}/parameters/${{ inputs.environment }}.bicepparam"
+          $paramFilePath = "${{ env.BICEP_PATH }}/parameters/${{ env.ENVIRONMENT }}.bicepparam"
           
           if (-not (Test-Path $paramFilePath)) {
             Write-Host "✗ Parameter file not found: $paramFilePath"
@@ -143,22 +146,20 @@ jobs:
     name: Manual Approval
     runs-on: ubuntu-latest
     needs: [what-if]
-    environment: 
-      name: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
     steps:
       - name: Approval Confirmation
         run: |
-          echo "✅ Manual approval received for ${{ inputs.environment }} environment"
+          echo "✅ Manual approval received for ${{ env.ENVIRONMENT }} environment"
           echo "Resource Group: ${{ env.RESOURCE_GROUP_NAME }}"
           echo "Proceeding with deployment..."
 
   # Step 4: Deploy infrastructure
   deploy:
-    name: Deploy to ${{ inputs.environment }}
+    name: Deploy to ${{ inputs.environment || 'dev' }} Environment
     runs-on: ubuntu-latest
     needs: [approval]
-    environment: 
-      name: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || vars.ENVIRONMENT_DEV }}
     outputs:
       appServiceUrl: ${{ steps.deploy.outputs.appServiceUrl }}
       appServiceHostname: ${{ steps.deploy.outputs.appServiceHostname }}
@@ -191,8 +192,8 @@ jobs:
             Write-Host "Creating new resource group..."
             az group create `
               --name "${{ env.RESOURCE_GROUP_NAME }}" `
-              --location "${{ inputs.region }}" `
-              --tags Environment="${{ inputs.environment }}" ManagedBy="GitHub-Actions" Project="${{ env.PROJECT_NAME }}" DeployedBy="GitHub-Actions"
+              --location "${{ env.REGION }}" `
+              --tags Environment="${{ env.ENVIRONMENT }}" ManagedBy="GitHub-Actions" Project="${{ env.PROJECT_NAME }}" DeployedBy="GitHub-Actions"
             Write-Host "✓ Resource group created"
           } else {
             Write-Host "✓ Resource group already exists"
@@ -204,10 +205,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Write-Host "🚀 Deploying infrastructure to ${{ inputs.environment }} environment..."
+          Write-Host "🚀 Deploying infrastructure to ${{ env.ENVIRONMENT }} environment..."
           
           $deploymentName = "smartcafe-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-          $paramFilePath = "${{ env.BICEP_PATH }}/parameters/${{ inputs.environment }}.bicepparam"
+          $paramFilePath = "${{ env.BICEP_PATH }}/parameters/${{ env.ENVIRONMENT }}.bicepparam"
           
           $output = az deployment group create `
             --resource-group "${{ env.RESOURCE_GROUP_NAME }}" `
@@ -286,12 +287,12 @@ jobs:
           $icon = if ($status -eq "success") { "✅" } else { "❌" }
           
           @"
-          ## $icon Infrastructure Deployment - ${{ inputs.environment }} Environment
+          ## $icon Infrastructure Deployment - ${{ env.ENVIRONMENT }} Environment
           
           ### Deployment Details
           - **Status**: $status
-          - **Environment**: ${{ inputs.environment }}
-          - **Region**: ${{ inputs.region }}
+          - **Environment**: ${{ env.ENVIRONMENT }}
+          - **Region**: ${{ env.REGION }}
           - **Resource Group**: ${{ env.RESOURCE_GROUP_NAME }}
           - **Deployment Time**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
           
@@ -321,7 +322,7 @@ jobs:
         if: needs.deploy.result == 'success'
         run: |
           echo "✅ Infrastructure deployment completed successfully!"
-          echo "Environment: ${{ inputs.environment }}"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
           echo "App Service URL: ${{ needs.deploy.outputs.appServiceUrl }}"
           echo ""
           echo "🎉 Deployment successful - ready for application deployment"
