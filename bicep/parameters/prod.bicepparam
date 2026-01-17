@@ -20,7 +20,7 @@ param environment = 'prod'
 // ==================================================
 
 param appServicePlanSku = 'P1v2'
-param dotnetVersion = 'DOTNETCORE|10.0'
+param dotnetVersion = 'DOTNETCORE|10.0' // Used in appServiceConfigs array in main.bicep
 
 // ==================================================
 // POSTGRESQL

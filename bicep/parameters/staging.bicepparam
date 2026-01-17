@@ -20,7 +20,7 @@ param environment = 'staging'
 // ==================================================
 
 param appServicePlanSku = 'S1'
-param dotnetVersion = 'DOTNETCORE|10.0'
+param dotnetVersion = 'DOTNETCORE|10.0' // Used in appServiceConfigs array in main.bicep
 
 // ==================================================
 // POSTGRESQL

@@ -1,7 +1,6 @@
 # Bicep
 *.bicep.json
 bicep/**/*.json
-!bicep/parameters/*.json
 !bicep/variables/*.json
 
 # Parameters with secrets
