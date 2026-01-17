@@ -1,5 +1,8 @@
 # GitHub Actions CI/CD Setup
 
+[![PR Validation](https://github.com/petro-konopelko/smartcafe-infrastructure/actions/workflows/pr.yml/badge.svg)](https://github.com/petro-konopelko/smartcafe-infrastructure/actions/workflows/pr.yml)
+[![Main Branch Deployment](https://github.com/petro-konopelko/smartcafe-infrastructure/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/petro-konopelko/smartcafe-infrastructure/actions/workflows/ci.yml)
+
 This directory contains GitHub Actions workflows for automated validation and deployment of Azure infrastructure using Bicep.
 
 ## Workflows
