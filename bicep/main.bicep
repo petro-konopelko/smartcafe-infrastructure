@@ -14,6 +14,8 @@ targetScope = 'resourceGroup'
 import { NetworkAddresses } from './types/network.bicep'
 import { ResourceTags } from './types/tags.bicep'
 import { EnvironmentConfig } from './types/environment.bicep'
+import { KeyVaultRoleAssignment, StorageRoleAssignment } from './types/rbac.bicep'
+import { AppServiceConfig } from './types/app-service.bicep'
 
 // ==================================================
 // PARAMETERS
@@ -37,7 +39,7 @@ param environment string
 ])
 param appServicePlanSku string
 
-@description('.NET version for the app')
+@description('.NET version for App Services')
 param dotnetVersion string
 
 // PostgreSQL Parameters
@@ -95,9 +97,8 @@ var resourceNames = {
   dbSubnet: '${environment}-db-subnet-${location}-${projectName}'
   nsgApp: '${environment}-app-nsg-${location}-${projectName}'
   appServicePlan: '${environment}-asp-${location}-${projectName}'
-  appService: '${environment}-app-${location}-${projectName}'
   postgres: '${environment}-postgres-${location}-${projectName}'
-  keyVault: '${environment}-kv-${location}-sc' // Key Vault names must be <= 24 chars
+  keyVault: take('${environment}-kv-${location}-sc', 24) // Key Vault names must be <= 24 chars
 }
 
 // Default tags
@@ -152,25 +153,79 @@ module postgres 'modules/postgresql.bicep' = {
   }
 }
 
-// 4. App Service (Plan + Web App)
+// 4. App Service (Plan + Web Apps)
+// App Service configurations
+var appServiceConfigs AppServiceConfig[] = [
+  {
+    name: '${environment}-app-menu-${location}-${projectName}'
+    dotnetVersion: dotnetVersion
+    alwaysOn: appServicePlanSku != 'F1' // Free tier doesn't support Always On
+  }
+]
+
 module appService 'modules/app-service.bicep' = {
   params: {
     location: location
     appServicePlanName: resourceNames.appServicePlan
-    appServiceName: resourceNames.appService
     skuName: appServicePlanSku
-    dotnetVersion: dotnetVersion
     subnetId: network.outputs.appSubnetId
     environmentConfig: envConfig
     tags: tags
+    appServices: appServiceConfigs
   }
 }
 
-// 5. Grant App Service access to Key Vault
-module keyVaultRbac 'modules/keyvault-rbac.bicep' = {
-  params: {
+var menuAppServicePrincipalId = appService.outputs.appServicePrincipalIds[0]
+
+// ==================================================
+// RBAC ROLE ASSIGNMENTS
+// ==================================================
+
+// Load Azure role definitions (role name -> GUID mapping)
+var azureRoles = loadJsonContent('./variables/azure-roles.json')
+
+// --- Key Vault RBAC ---
+var keyVaultRbac KeyVaultRoleAssignment[] = [
+  {
     keyVaultName: resourceNames.keyVault
-    appServicePrincipalId: appService.outputs.appServicePrincipalId
+    roleId: azureRoles.KeyVaultSecretsUser
+    principalId: menuAppServicePrincipalId
+    principalType: 'ServicePrincipal'
+    description: 'Allows App Service to read secrets from Key Vault'
+  }
+  // Add more Key Vault assignments here...
+]
+
+module keyVaultRbacAssignments 'modules/rbac-keyvault.bicep' = {
+  params: {
+    roleAssignments: keyVaultRbac
+  }
+}
+
+// --- Storage RBAC ---
+var storageRbac StorageRoleAssignment[] = [
+  // Example: Storage Account access (account-level, default scope)
+  // {
+  //   storageAccountName: 'mystorageaccount'
+  //   roleId: azureRoles.StorageBlobDataContributor
+  //   principalId: appService.outputs.appServicePrincipalIds[0]
+  //   principalType: 'ServicePrincipal'
+  //   // scope defaults to 'Account' (entire storage account)
+  // }
+  // Example: Storage blob container access (sub-resource scoping - TODO: implement in module)
+  // {
+  //   storageAccountName: 'mystorageaccount'
+  //   scope: 'BlobContainer'
+  //   subResourceName: 'mycontainer'
+  //   roleId: azureRoles.StorageBlobDataContributor
+  //   principalId: appService.outputs.appServicePrincipalIds[0]
+  //   principalType: 'ServicePrincipal'
+  // }
+]
+
+module storageRbacAssignments 'modules/rbac-storage.bicep' = if (length(storageRbac) > 0) {
+  params: {
+    roleAssignments: storageRbac
   }
 }
 
@@ -184,14 +239,24 @@ output environmentName string = environment
 @description('Resource Group Location')
 output location string = location
 
-@description('App Service default hostname')
-output appServiceHostname string = resourceNames.appService
 
-@description('App Service URL')
-output appServiceUrl string = appService.outputs.appServiceUrl
+@description('Menu App Service default hostname')
+output menuAppServiceHostname string = appService.outputs.appServiceHostnames[0]
 
-@description('App Service Managed Identity Principal ID')
-output appServicePrincipalId string = appService.outputs.appServicePrincipalId
+@description('Menu App Service URL')
+output menuAppServiceUrl string = appService.outputs.appServiceUrls[0]
+
+@description('Menu App Service Managed Identity Principal ID')
+output menuAppServicePrincipalId string = appService.outputs.appServicePrincipalIds[0]
+
+@description('All App Service names')
+output appServiceNames array = appService.outputs.appServiceNames
+
+@description('All App Service URLs')
+output appServiceUrls array = appService.outputs.appServiceUrls
+
+@description('All App Service Principal IDs')
+output appServicePrincipalIds array = appService.outputs.appServicePrincipalIds
 
 
 @description('PostgreSQL database name')

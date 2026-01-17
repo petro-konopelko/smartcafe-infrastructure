@@ -13,6 +13,7 @@ targetScope = 'resourceGroup'
 
 import { ResourceTags } from '../types/tags.bicep'
 import { EnvironmentConfig } from '../types/environment.bicep'
+import { AppServiceConfig } from '../types/app-service.bicep'
 
 // ==================================================
 // PARAMETERS
@@ -24,14 +25,8 @@ param location string
 @description('App Service Plan name')
 param appServicePlanName string
 
-@description('App Service name')
-param appServiceName string
-
 @description('App Service Plan SKU')
 param skuName string
-
-@description('.NET version')
-param dotnetVersion string
 
 @description('Subnet ID for VNet integration')
 param subnetId string
@@ -42,8 +37,8 @@ param environmentConfig EnvironmentConfig
 @description('Resource tags')
 param tags ResourceTags
 
-@description('Enable Always On for the App Service')
-param alwaysOn bool = false
+@description('Array of App Service configurations')
+param appServices AppServiceConfig[]
 
 // ==================================================
 // APP SERVICE PLAN
@@ -66,8 +61,8 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2025-03-01' = {
 // APP SERVICE
 // ==================================================
 
-resource appService 'Microsoft.Web/sites@2025-03-01' = {
-  name: appServiceName
+resource appService 'Microsoft.Web/sites@2025-03-01' = [for (app, index) in appServices: {
+  name: app.name
   location: location
   tags: tags
   kind: 'app,linux'
@@ -79,8 +74,8 @@ resource appService 'Microsoft.Web/sites@2025-03-01' = {
     httpsOnly: true
     virtualNetworkSubnetId: subnetId
     siteConfig: {
-      linuxFxVersion: dotnetVersion
-      alwaysOn: alwaysOn
+      linuxFxVersion: app.dotnetVersion
+      alwaysOn: app.?alwaysOn ?? false
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       http20Enabled: false
@@ -96,26 +91,29 @@ resource appService 'Microsoft.Web/sites@2025-03-01' = {
       ]
     }
   }
-}
+}]
 
 // ==================================================
 // OUTPUTS
 // ==================================================
 
-@description('App Service resource ID')
-output appServiceId string = appService.id
+@description('App Service resource IDs in input sequence')
+output appServiceIds array = [for (app, index) in appServices: appService[index].id]
 
-@description('App Service name')
-output appServiceName string = appService.name
+@description('App Service names in input sequence')
+output appServiceNames array = [for (app, index) in appServices: appService[index].name]
 
-@description('App Service default hostname')
-output appServiceHostname string = appService.properties.defaultHostName
+@description('App Service default hostnames in input sequence')
+output appServiceHostnames array = [for (app, index) in appServices: appService[index].properties.defaultHostName]
 
-@description('App Service URL')
-output appServiceUrl string = 'https://${appService.properties.defaultHostName}'
+@description('App Service URLs in input sequence')
+output appServiceUrls array = [for (app, index) in appServices: 'https://${appService[index].properties.defaultHostName}']
 
-@description('App Service Managed Identity Principal ID')
-output appServicePrincipalId string = appService.identity.principalId
+@description('App Service Managed Identity Principal IDs in input sequence')
+output appServicePrincipalIds array = [for (app, index) in appServices: appService[index].identity.principalId]
 
 @description('App Service Plan resource ID')
 output appServicePlanId string = appServicePlan.id
+
+@description('Number of App Services created')
+output appServiceCount int = length(appServices)
