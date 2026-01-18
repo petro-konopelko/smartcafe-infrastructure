@@ -31,9 +31,6 @@ param skuName string
 @description('Subnet ID for VNet integration')
 param subnetId string
 
-@description('Environment-specific configuration object')
-param environmentConfig EnvironmentConfig
-
 @description('Resource tags')
 param tags ResourceTags
 
@@ -61,37 +58,30 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2025-03-01' = {
 // APP SERVICE
 // ==================================================
 
-resource appService 'Microsoft.Web/sites@2025-03-01' = [for (app, index) in appServices: {
-  name: app.name
-  location: location
-  tags: tags
-  kind: 'app,linux'
-  identity: {
-    type: 'SystemAssigned'
-  }
-  properties: {
-    serverFarmId: appServicePlan.id
-    httpsOnly: true
-    virtualNetworkSubnetId: subnetId
-    siteConfig: {
-      linuxFxVersion: app.dotnetVersion
-      alwaysOn: app.?alwaysOn ?? false
-      ftpsState: 'Disabled'
-      minTlsVersion: '1.2'
-      http20Enabled: false
-      appSettings: [
-        {
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: environmentConfig.aspnetcoreEnvironment
-        }
-        {
-          name: 'WEBSITE_RUN_FROM_PACKAGE'
-          value: '1'
-        }
-      ]
+resource appService 'Microsoft.Web/sites@2025-03-01' = [
+  for (app, index) in appServices: {
+    name: app.name
+    location: location
+    tags: tags
+    kind: 'app,linux'
+    identity: {
+      type: 'SystemAssigned'
+    }
+    properties: {
+      serverFarmId: appServicePlan.id
+      httpsOnly: true
+      virtualNetworkSubnetId: subnetId
+      siteConfig: {
+        linuxFxVersion: app.dotnetVersion
+        alwaysOn: app.alwaysOn
+        ftpsState: 'Disabled'
+        minTlsVersion: '1.2'
+        http20Enabled: false
+        appSettings: app.appSettings
+      }
     }
   }
-}]
+]
 
 // ==================================================
 // OUTPUTS
@@ -107,7 +97,9 @@ output appServiceNames array = [for (app, index) in appServices: appService[inde
 output appServiceHostnames array = [for (app, index) in appServices: appService[index].properties.defaultHostName]
 
 @description('App Service URLs in input sequence')
-output appServiceUrls array = [for (app, index) in appServices: 'https://${appService[index].properties.defaultHostName}']
+output appServiceUrls array = [
+  for (app, index) in appServices: 'https://${appService[index].properties.defaultHostName}'
+]
 
 @description('App Service Managed Identity Principal IDs in input sequence')
 output appServicePrincipalIds array = [for (app, index) in appServices: appService[index].identity.principalId]

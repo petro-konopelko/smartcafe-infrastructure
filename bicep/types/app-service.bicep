@@ -14,5 +14,11 @@ type AppServiceConfig = {
   dotnetVersion: string
   
   @description('Enable Always On for the App Service')
-  alwaysOn: bool?
+  alwaysOn: bool
+
+  @description('Application settings as name-value pairs')
+  appSettings: {
+    name: string
+    value: string
+  }[]
 }

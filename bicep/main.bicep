@@ -155,11 +155,27 @@ module postgres 'modules/postgresql.bicep' = {
 
 // 4. App Service (Plan + Web Apps)
 // App Service configurations
+var appSettings = [
+  {
+    name: 'DOTNET_ENVIRONMENT'
+    value: envConfig.aspnetcoreEnvironment
+  }
+  {
+    name: 'DOTNET_KeyVault__Uri'
+    value: keyVault.outputs.keyVaultUri
+  }
+  {
+    name: 'WEBSITE_RUN_FROM_PACKAGE'
+    value: '1'
+  }
+]
+
 var appServiceConfigs AppServiceConfig[] = [
   {
     name: '${environment}-app-menu-${location}-${projectName}'
     dotnetVersion: dotnetVersion
-    alwaysOn: appServicePlanSku != 'F1' // Free tier doesn't support Always On
+    alwaysOn: appServicePlanSku != 'F1' // Free tier doesn't support Always On.
+    appSettings: appSettings
   }
 ]
 
@@ -169,7 +185,6 @@ module appService 'modules/app-service.bicep' = {
     appServicePlanName: resourceNames.appServicePlan
     skuName: appServicePlanSku
     subnetId: network.outputs.appSubnetId
-    environmentConfig: envConfig
     tags: tags
     appServices: appServiceConfigs
   }
@@ -239,7 +254,6 @@ output environmentName string = environment
 @description('Resource Group Location')
 output location string = location
 
-
 @description('Menu App Service default hostname')
 output menuAppServiceHostname string = appService.outputs.appServiceHostnames[0]
 
@@ -258,13 +272,11 @@ output appServiceUrls array = appService.outputs.appServiceUrls
 @description('All App Service Principal IDs')
 output appServicePrincipalIds array = appService.outputs.appServicePrincipalIds
 
-
 @description('PostgreSQL database name')
 output postgresResourceName string = resourceNames.postgres
 
 @description('PostgreSQL server FQDN')
 output postgresServerFqdn string = postgres.outputs.serverFqdn
-
 
 @description('Key Vault name')
 output keyVaultName string = resourceNames.keyVault
