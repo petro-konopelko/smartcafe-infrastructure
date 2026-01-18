@@ -15,7 +15,7 @@ targetScope = 'resourceGroup'
 // TYPE IMPORTS
 // ==================================================
 
-import { StorageRoleAssignment } from '../types/rbac.bicep'
+import { StorageRoleAssignment } from '../../types/rbac.bicep'
 
 // ==================================================
 // PARAMETERS

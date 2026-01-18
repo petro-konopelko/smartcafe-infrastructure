@@ -252,6 +252,53 @@ The validation workflow checks:
 3. **Parameters**: JSON validity
 4. **Deployment**: Template validation in Azure (dry-run)
 
+## CI/CD Managed Identity Setup
+
+### Overview
+
+The infrastructure now includes automated setup for CI/CD deployments using User-Assigned Managed Identities with federated credentials. This eliminates the need for storing Azure credentials as GitHub secrets.
+
+### How It Works
+
+1. **Bicep Template Creates:**
+   - User-Assigned Managed Identity (UAMI) for each app service
+   - Federated credential trusting GitHub OIDC for specific repo/environment
+   - Website Contributor role assignment to the App Service
+
+2. **GitHub Actions Authenticates:**
+   - Uses OIDC token from GitHub
+   - Exchanges it for Azure access token via federated credential
+   - Deploys to App Service using managed identity
+
+### Module Usage
+
+```bicep
+// In main.bicep
+module menuAppDeploymentIdentity 'modules/appservice-deployment-identity.bicep' = {
+  params: {
+    location: location
+    managedIdentityName: '${environment}-uami-menu-${location}-${projectName}'
+    tags: tags
+    githubRepository: 'petro-konopelko/smartcafe-menu'  // Your app repo
+    githubEnvironment: environment                       // dev/staging/prod
+    appServiceName: appServiceConfigs[0].name
+    websiteContributorRoleId: azureRoles.WebsiteContributor
+  }
+}
+```
+
+### Required GitHub Secrets (App Repository)
+
+For each application repository (e.g., `smartcafe-menu`), configure:
+
+```
+AZURE_CLIENT_ID              # Managed Identity Client ID (from Bicep output)
+AZURE_TENANT_ID              # Azure AD Tenant ID
+AZURE_SUBSCRIPTION_ID        # Azure Subscription ID
+```
+
+These values are output by the infrastructure deployment and can be found in the deployment outputs.
+
 ## File Structure
 
 ```
@@ -261,6 +308,22 @@ The validation workflow checks:
     ├── bicep-validate.yml       # Reusable validation composite action
     ├── pr.yml                   # Pull request validation workflow
     └── ci.yml                   # Main branch deployment workflow
+
+bicep/
+├── modules/
+│   ├── rbac/
+│   │   ├── keyvault.bicep          # Key Vault RBAC assignments
+│   │   ├── storage.bicep           # Storage RBAC assignments
+│   │   └── appservice.bicep        # App Service RBAC assignments
+│   ├── appservice-deployment-identity.bicep  # Combined UAMI + RBAC for CI/CD
+│   ├── app-service.bicep           # App Service resources
+│   ├── keyvault.bicep              # Key Vault resources
+│   ├── network.bicep               # Virtual Network resources
+│   └── postgresql.bicep            # PostgreSQL resources
+├── types/
+│   └── rbac.bicep                  # RBAC type definitions
+└── variables/
+    └── azure-roles.json            # Azure role GUID mappings
 ```
 
 ## Next Steps

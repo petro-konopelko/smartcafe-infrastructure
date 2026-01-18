@@ -176,6 +176,7 @@ module appService 'modules/app-service.bicep' = {
 }
 
 var menuAppServicePrincipalId = appService.outputs.appServicePrincipalIds[0]
+var menuAppServiceName = appServiceConfigs[0].name
 
 // ==================================================
 // RBAC ROLE ASSIGNMENTS
@@ -196,7 +197,7 @@ var keyVaultRbac KeyVaultRoleAssignment[] = [
   // Add more Key Vault assignments here...
 ]
 
-module keyVaultRbacAssignments 'modules/rbac-keyvault.bicep' = {
+module keyVaultRbacAssignments 'modules/rbac/keyvault.bicep' = {
   params: {
     roleAssignments: keyVaultRbac
   }
@@ -223,9 +224,26 @@ var storageRbac StorageRoleAssignment[] = [
   // }
 ]
 
-module storageRbacAssignments 'modules/rbac-storage.bicep' = if (length(storageRbac) > 0) {
+module storageRbacAssignments 'modules/rbac/storage.bicep' = if (length(storageRbac) > 0) {
   params: {
     roleAssignments: storageRbac
+  }
+}
+
+// ==================================================
+// MANAGED IDENTITY FOR CI/CD DEPLOYMENTS
+// ==================================================
+
+// Menu App - Managed Identity with GitHub federated credential and Website Contributor role
+module menuAppDeploymentIdentity 'modules/appservice-deployment-identity.bicep' = {
+  params: {
+    location: location
+    managedIdentityName: '${environment}-uami-menu-${location}-${projectName}'
+    tags: tags
+    githubRepository: 'petro-konopelko/smartcafe-menu'
+    githubEnvironment: environment
+    appServiceName: menuAppServiceName
+    websiteContributorRoleId: azureRoles.WebsiteContributor
   }
 }
 
@@ -271,3 +289,13 @@ output keyVaultName string = resourceNames.keyVault
 
 @description('Key Vault URI')
 output keyVaultUri string = keyVault.outputs.keyVaultUri
+
+
+@description('Menu App Deployment Identity - Principal ID')
+output menuAppDeploymentIdentityPrincipalId string = menuAppDeploymentIdentity.outputs.managedIdentityPrincipalId
+
+@description('Menu App Deployment Identity - Client ID')
+output menuAppDeploymentIdentityClientId string = menuAppDeploymentIdentity.outputs.managedIdentityClientId
+
+@description('Menu App Deployment Identity - Name')
+output menuAppDeploymentIdentityName string = menuAppDeploymentIdentity.outputs.managedIdentityName

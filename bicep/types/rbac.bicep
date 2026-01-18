@@ -80,6 +80,29 @@ type StorageRoleAssignment = {
   description: string?
 }
 
+// ==================================================
+// APP SERVICE ROLE ASSIGNMENT TYPE
+// ==================================================
+
+@description('App Service role assignment - scoped to App Service level')
+@export()
+type AppServiceRoleAssignment = {
+  @description('Name of the App Service to scope the assignment to')
+  appServiceName: string
+
+  @description('Azure role definition GUID (use azureRoles.RoleName from main.bicep)')
+  roleId: string
+
+  @description('Principal ID (Object ID of the managed identity, user, or service principal)')
+  principalId: string
+
+  @description('Type of principal - strictly typed')
+  principalType: PrincipalType
+
+  @description('Optional description for the role assignment')
+  description: string?
+}
+
 // TODO: Add more resource-specific types as needed
 // Example:
 // @description('App Service role assignment')

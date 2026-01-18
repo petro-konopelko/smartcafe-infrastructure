@@ -15,7 +15,7 @@ targetScope = 'resourceGroup'
 // TYPE IMPORTS
 // ==================================================
 
-import { KeyVaultRoleAssignment } from '../types/rbac.bicep'
+import { KeyVaultRoleAssignment } from '../../types/rbac.bicep'
 
 // ==================================================
 // PARAMETERS
