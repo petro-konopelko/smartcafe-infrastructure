@@ -12,7 +12,7 @@ Separate modules per resource type (KeyVault, Storage) with auto-generated GUID 
 ## Quick Start
 
 ```bicep
-import { KeyVaultRoleAssignment, StorageRoleAssignment } from './types/rbac.bicep'
+import { KeyVaultRoleAssignment, StorageRoleAssignment, AppServiceRoleAssignment } from './types/rbac.bicep'
 
 var azureRoles = loadJsonContent('./variables/azure-roles.json')
 
@@ -27,7 +27,7 @@ var keyVaultRbac KeyVaultRoleAssignment[] = [
   }
 ]
 
-module keyVaultRbacAssignments 'modules/rbac-keyvault.bicep' = {
+module keyVaultRbacAssignments 'modules/rbac/keyvault.bicep' = {
   params: { roleAssignments: keyVaultRbac }
 }
 
@@ -41,8 +41,23 @@ var storageRbac StorageRoleAssignment[] = [
   }
 ]
 
-module storageRbacAssignments 'modules/rbac-storage.bicep' = if (length(storageRbac) > 0) {
+module storageRbacAssignments 'modules/rbac/storage.bicep' = if (length(storageRbac) > 0) {
   params: { roleAssignments: storageRbac }
+}
+
+// --- App Service RBAC ---
+var appServiceRbac AppServiceRoleAssignment[] = [
+  {
+    appServiceName: 'my-app-service'
+    roleId: azureRoles.WebsiteContributor
+    principalId: managedIdentity.outputs.managedIdentityPrincipalId
+    principalType: 'ServicePrincipal'
+    description: 'CI/CD identity deploys to App Service'  // Optional
+  }
+]
+
+module appServiceRbacAssignments 'modules/rbac/appservice.bicep' = {
+  params: { roleAssignments: appServiceRbac }
 }
 ```
 
@@ -98,6 +113,7 @@ Currently configured in `azure-roles.json`:
 
 - **KeyVaultSecretsUser** - Read secrets from Key Vault
 - **StorageBlobDataContributor** - Read/write storage blobs
+- **WebsiteContributor** - Deploy and manage App Service resources
 
 **Add new role:**
 ```json
@@ -131,7 +147,52 @@ Find role GUIDs: `az role definition list --name "Role Name"`
 - `subResourceName?: string` (required if scope ≠ `'Account'`)
 - `description?: string`
 
+**AppServiceRoleAssignment:**
+- `appServiceName: string`
+- `roleId: string`
+- `principalId: string`
+- `principalType: PrincipalType`
+- `description?: string`
+
 **StorageScope (strict):** `Account` | `BlobContainer` | `Table` | `Queue` | `FileShare`
+
+## CI/CD Deployment Identity (Managed Identity + RBAC)
+
+**Module:** `modules/appservice-deployment-identity.bicep`
+
+Combined module that creates a User-Assigned Managed Identity with GitHub federated credentials and assigns Website Contributor role to an App Service.
+
+**Use this for:** Setting up CI/CD deployments from GitHub Actions to App Service
+
+**Example:**
+```bicep
+module menuAppDeploymentIdentity 'modules/appservice-deployment-identity.bicep' = {
+  params: {
+    location: location
+    managedIdentityName: '${environment}-uami-menu-${location}-${projectName}'
+    tags: tags
+    githubRepository: 'petro-konopelko/smartcafe-menu'
+    githubEnvironment: environment  // dev, staging, prod
+    appServiceName: appServiceConfigs[0].name
+    websiteContributorRoleId: azureRoles.WebsiteContributor
+  }
+}
+
+// Outputs available:
+// - managedIdentityPrincipalId
+// - managedIdentityClientId  (use in GitHub Actions)
+// - federatedCredentialSubject
+```
+
+**Features:**
+- ✅ Creates User-Assigned Managed Identity
+- ✅ Configures GitHub OIDC federated credential
+- ✅ Assigns Website Contributor role to App Service
+- ✅ Reusable for multiple services
+- ✅ No secrets needed in GitHub Actions
+
+**Reuse for new service:**
+Just add another module instance with different app service name and GitHub repository.
 
 ## TODO: Storage Sub-Resource Scoping
 
@@ -166,32 +227,32 @@ Find role GUIDs: `az role definition list --name "Role Name"`
 ## Adding New Resource Type
 
 1. **Add type:** `bicep/types/rbac.bicep`
-2. **Create module:** `bicep/modules/rbac-<resource>.bicep`
+2. **Create module:** `bicep/modules/rbac/<resource>.bicep`
 3. **Use in main:** Import type, declare array, call module
 
-**Example for AppService:**
+**Example template (following implemented AppService pattern):**
 ```bicep
 // types/rbac.bicep
 @export()
-type AppServiceRoleAssignment = {
-  appServiceName: string
+type <Resource>RoleAssignment = {
+  <resource>Name: string
   roleId: string
   principalId: string
   principalType: PrincipalType
   description: string?
 }
 
-// modules/rbac-appservice.bicep
-import { AppServiceRoleAssignment } from '../types/rbac.bicep'
-param roleAssignments AppServiceRoleAssignment[]
+// modules/rbac/<resource>.bicep
+import { <Resource>RoleAssignment } from '../../types/rbac.bicep'
+param roleAssignments <Resource>RoleAssignment[]
 
-resource appServices 'Microsoft.Web/sites@2023-12-01' existing = [for a in roleAssignments: {
-  name: a.appServiceName
+resource resources 'Microsoft.<Provider>/<type>@<version>' existing = [for a in roleAssignments: {
+  name: a.<resource>Name
 }]
 
 resource assignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for (a, i) in roleAssignments: {
-  name: guid(appServices[i].id, a.principalId, a.roleId)
-  scope: appServices[i]
+  name: guid(resources[i].id, a.principalId, a.roleId)
+  scope: resources[i]
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', a.roleId)
     principalId: a.principalId
@@ -201,8 +262,8 @@ resource assignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for
 }]
 
 // main.bicep
-var appServiceRbac AppServiceRoleAssignment[] = [...]
-module appServiceRbacAssignments 'modules/rbac-appservice.bicep' = {...}
+var <resource>Rbac <Resource>RoleAssignment[] = [...]
+module <resource>RbacAssignments 'modules/rbac/<resource>.bicep' = {...}
 ```
 
 ## Troubleshooting
