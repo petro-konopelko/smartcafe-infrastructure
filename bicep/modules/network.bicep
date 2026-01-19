@@ -110,17 +110,35 @@ resource appNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
   properties: {
     securityRules: [
       {
+        name: 'AllowKeyVaultOutbound'
+        properties: {
+          description: 'Allow outbound HTTPS traffic to Azure Key Vault from App Subnet'
+          priority: 200
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureKeyVault'
+        }
+      }
+      {
         name: 'DenyInternetOutbound'
         properties: {
-          description: 'Deny outbound traffic to internet'
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: 'Internet'
-          access: 'Deny'
+          description: 'Deny all outbound traffic to Internet from App Subnet'
           priority: 4000
           direction: 'Outbound'
+          access: 'Deny'
+          protocol: '*'
+
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Internet'
         }
       }
     ]
