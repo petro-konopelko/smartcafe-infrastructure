@@ -161,12 +161,8 @@ var appSettings = [
     value: envConfig.aspnetcoreEnvironment
   }
   {
-    name: 'DOTNET_KeyVault__Uri'
+    name: 'KeyVault__Uri'
     value: keyVault.outputs.keyVaultUri
-  }
-  {
-    name: 'WEBSITE_RUN_FROM_PACKAGE'
-    value: '1'
   }
 ]
 
