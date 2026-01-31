@@ -169,6 +169,10 @@ resource adminClient 'Microsoft.Web/staticSites@2025-03-01' = {
     name: staticWebAppSku
     tier: staticWebAppSku
   }
+  properties:{
+    enterpriseGradeCdnStatus: 'Disabled'
+    provider: 'GitHub'
+  }
 }
 
 // 4. App Service (Plan + Web Apps)
