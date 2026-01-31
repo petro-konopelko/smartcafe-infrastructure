@@ -20,6 +20,7 @@ param environment = 'prod'
 // ==================================================
 
 param staticWebAppSku = 'Standard'
+param staticWebAppLocation = 'westeurope'
 
 // ==================================================
 // APP SERVICE

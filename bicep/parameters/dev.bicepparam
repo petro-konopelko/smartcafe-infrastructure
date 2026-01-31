@@ -20,6 +20,7 @@ param environment = 'dev'
 // ==================================================
 
 param staticWebAppSku = 'Free'
+param staticWebAppLocation = 'westeurope'
 
 // ==================================================
 // APP SERVICE
