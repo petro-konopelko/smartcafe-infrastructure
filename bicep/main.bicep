@@ -42,6 +42,9 @@ param appServicePlanSku string
 @description('.NET version for App Services')
 param dotnetVersion string
 
+@description('Azure Static Web App SKU')
+param staticWebAppSku string
+
 // PostgreSQL Parameters
 @description('PostgreSQL administrator login name')
 @secure()
@@ -96,6 +99,7 @@ var resourceNames = {
   appSubnet: '${environment}-app-subnet-${location}-${projectName}'
   dbSubnet: '${environment}-db-subnet-${location}-${projectName}'
   nsgApp: '${environment}-app-nsg-${location}-${projectName}'
+  adminClient: '${environment}-admin-client-swa-${location}-${projectName}'
   appServicePlan: '${environment}-asp-${location}-${projectName}'
   postgres: '${environment}-postgres-${location}-${projectName}'
   keyVault: take('${environment}-kv-${location}-sc', 24) // Key Vault names must be <= 24 chars
@@ -153,6 +157,17 @@ module postgres 'modules/postgresql.bicep' = {
   }
 }
 
+// 4. Admin Client - Azure Static Web App
+resource adminClient 'Microsoft.Web/staticSites@2024-11-01' = {
+  name: resourceNames.adminClient
+  location: location
+  tags: tags
+  sku: {
+    name: staticWebAppSku
+    tier: staticWebAppSku
+  }
+}
+
 // 4. App Service (Plan + Web Apps)
 // App Service configurations
 var appSettings = [
@@ -163,6 +178,10 @@ var appSettings = [
   {
     name: 'KeyVault__Uri'
     value: keyVault.outputs.keyVaultUri
+  }
+  {
+    name: 'Cors__AllowedOrigins__Frontend'
+    value: 'https://${adminClient.properties.defaultHostname}'
   }
 ]
 
