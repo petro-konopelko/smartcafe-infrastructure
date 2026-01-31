@@ -20,6 +20,7 @@ param environment = 'staging'
 // ==================================================
 
 param staticWebAppSku = 'Standard'
+param staticWebAppLocation = 'westeurope'
 
 // ==================================================
 // APP SERVICE

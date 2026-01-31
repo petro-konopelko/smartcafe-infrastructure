@@ -45,6 +45,9 @@ param dotnetVersion string
 @description('Azure Static Web App SKU')
 param staticWebAppSku string
 
+@description('Azure Static Web App location')
+param staticWebAppLocation string
+
 // PostgreSQL Parameters
 @description('PostgreSQL administrator login name')
 @secure()
@@ -99,7 +102,7 @@ var resourceNames = {
   appSubnet: '${environment}-app-subnet-${location}-${projectName}'
   dbSubnet: '${environment}-db-subnet-${location}-${projectName}'
   nsgApp: '${environment}-app-nsg-${location}-${projectName}'
-  adminClient: '${environment}-admin-client-swa-${location}-${projectName}'
+  adminClient: '${environment}-admin-client-swa-${staticWebAppLocation}-${projectName}'
   appServicePlan: '${environment}-asp-${location}-${projectName}'
   postgres: '${environment}-postgres-${location}-${projectName}'
   keyVault: take('${environment}-kv-${location}-sc', 24) // Key Vault names must be <= 24 chars
@@ -158,9 +161,9 @@ module postgres 'modules/postgresql.bicep' = {
 }
 
 // 4. Admin Client - Azure Static Web App
-resource adminClient 'Microsoft.Web/staticSites@2024-11-01' = {
+resource adminClient 'Microsoft.Web/staticSites@2025-03-01' = {
   name: resourceNames.adminClient
-  location: location
+  location: staticWebAppLocation
   tags: tags
   sku: {
     name: staticWebAppSku
