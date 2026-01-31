@@ -12,7 +12,6 @@ targetScope = 'resourceGroup'
 // ==================================================
 
 import { ResourceTags } from '../types/tags.bicep'
-import { EnvironmentConfig } from '../types/environment.bicep'
 import { AppServiceConfig } from '../types/app-service.bicep'
 
 // ==================================================
