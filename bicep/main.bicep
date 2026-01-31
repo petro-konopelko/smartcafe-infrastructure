@@ -187,7 +187,7 @@ var appSettings = [
     value: keyVault.outputs.keyVaultUri
   }
   {
-    name: 'Cors__AllowedOrigins__Frontend'
+    name: 'Cors__AllowedOrigins__AdminClient'
     value: 'https://${adminClient.properties.defaultHostname}'
   }
 ]
