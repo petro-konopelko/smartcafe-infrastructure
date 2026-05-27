@@ -46,6 +46,12 @@ param version string
 @description('Subnet ID for private networking')
 param subnetId string
 
+@description('Principal ID (Object ID) of the migration UAMI to assign as Entra ID administrator')
+param migrationUamiPrincipalId string
+
+@description('Display name of the migration UAMI — used as the Entra ID administrator name')
+param migrationUamiName string
+
 @description('Resource tags')
 param tags ResourceTags
 
@@ -109,8 +115,23 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' =
     }
     authConfig: {
       activeDirectoryAuth: 'Enabled'
-      passwordAuth: 'Enabled'
+      passwordAuth: 'Disabled'
+      tenantId: subscription().tenantId
     }
+  }
+}
+
+// ==================================================
+// POSTGRESQL ENTRA ID ADMINISTRATOR — MIGRATION UAMI
+// ==================================================
+
+resource migrationUamiAdmin 'Microsoft.DBforPostgreSQL/flexibleServers/administrators@2025-08-01' = {
+  name: migrationUamiPrincipalId
+  parent: postgresServer
+  properties: {
+    principalType: 'ServicePrincipal'
+    principalName: migrationUamiName
+    tenantId: subscription().tenantId
   }
 }
 

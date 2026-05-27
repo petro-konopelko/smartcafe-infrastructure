@@ -15,6 +15,7 @@
 # - Azure Service Principal configured for OIDC authentication
 # - GitHub Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
 # - GitHub Secrets: POSTGRES_ADMIN_LOGIN, POSTGRES_ADMIN_PASSWORD
+# - GitHub Secrets: GH_TOKEN_MENU_REPO (PAT with variables:write on petro-konopelko/smartcafe-menu)
 # - GitHub Environments configured: dev, staging, prod
 # ==================================================
 
@@ -153,6 +154,9 @@ jobs:
       postgresResourceName: ${{ steps.deploy.outputs.postgresResourceName }}
       keyVaultName: ${{ steps.deploy.outputs.keyVaultName }}
       keyVaultUri: ${{ steps.deploy.outputs.keyVaultUri }}
+      runnerSubnetId: ${{ steps.deploy.outputs.runnerSubnetId }}
+      migrationUamiClientId: ${{ steps.deploy.outputs.migrationUamiClientId }}
+      appServiceName: ${{ steps.deploy.outputs.appServiceName }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -212,12 +216,51 @@ jobs:
           }
           
           Write-Host "✓ Deployment completed successfully"
-          
+
           # Parse and set outputs
           $outputObj = $output | ConvertFrom-Json
-          "appServiceUrl=$($outputObj.appServiceUrl.value)" >> $env:GITHUB_OUTPUT
+          "appServiceUrl=$($outputObj.menuAppServiceUrl.value)" >> $env:GITHUB_OUTPUT
+          "appServiceHostname=$($outputObj.menuAppServiceHostname.value)" >> $env:GITHUB_OUTPUT
           "postgresServerFqdn=$($outputObj.postgresServerFqdn.value)" >> $env:GITHUB_OUTPUT
+          "postgresResourceName=$($outputObj.postgresResourceName.value)" >> $env:GITHUB_OUTPUT
           "keyVaultName=$($outputObj.keyVaultName.value)" >> $env:GITHUB_OUTPUT
+          "keyVaultUri=$($outputObj.keyVaultUri.value)" >> $env:GITHUB_OUTPUT
+          "runnerSubnetId=$($outputObj.runnerSubnetId.value)" >> $env:GITHUB_OUTPUT
+          "migrationUamiClientId=$($outputObj.migrationUamiClientId.value)" >> $env:GITHUB_OUTPUT
+          "appServiceName=$($outputObj.appServiceNames.value[0])" >> $env:GITHUB_OUTPUT
+
+      # Propagate deployment outputs as GitHub Actions environment variables on smartcafe-menu
+      # Requires GH_TOKEN_MENU_REPO secret with variables:write permission on petro-konopelko/smartcafe-menu
+      # continue-on-error: true so a missing token does not fail the deployment itself
+      - name: Propagate Variables to smartcafe-menu
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_MENU_REPO }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env_name = "${{ env.ENVIRONMENT }}"
+          $repo = "petro-konopelko/smartcafe-menu"
+
+          Write-Host "Propagating deployment outputs to $repo ($env_name environment)..."
+
+          $variables = @{
+            POSTGRES_SERVER_FQDN    = "${{ steps.deploy.outputs.postgresServerFqdn }}"
+            RUNNER_SUBNET_ID        = "${{ steps.deploy.outputs.runnerSubnetId }}"
+            MIGRATION_UAMI_CLIENT_ID = "${{ steps.deploy.outputs.migrationUamiClientId }}"
+            APP_SERVICE_NAME        = "${{ steps.deploy.outputs.appServiceName }}"
+          }
+
+          foreach ($varName in $variables.Keys) {
+            $varValue = $variables[$varName]
+            gh variable set $varName `
+              --repo $repo `
+              --env $env_name `
+              --body $varValue
+            Write-Host "  Set $varName"
+          }
+
+          Write-Host "✓ Environment variables propagated to $repo"
 
       # Deployment validation (best practice: smoke test)
       - name: Validate Deployment

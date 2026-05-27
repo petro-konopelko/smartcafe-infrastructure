@@ -102,6 +102,8 @@ var resourceNames = {
   appSubnet: '${environment}-app-subnet-${location}-${projectName}'
   dbSubnet: '${environment}-db-subnet-${location}-${projectName}'
   nsgApp: '${environment}-app-nsg-${location}-${projectName}'
+  runnerSubnet: '${environment}-runner-subnet-${location}-${projectName}'
+  runnerNsg: '${environment}-runner-nsg-${location}-${projectName}'
   adminClient: '${environment}-admin-client-swa-${staticWebAppLocation}-${projectName}'
   appServicePlan: '${environment}-asp-${location}-${projectName}'
   postgres: '${environment}-postgres-${location}-${projectName}'
@@ -129,6 +131,8 @@ module network 'modules/network.bicep' = {
     appSubnetName: resourceNames.appSubnet
     databaseSubnetName: resourceNames.dbSubnet
     appNsgName: resourceNames.nsgApp
+    runnerSubnetName: resourceNames.runnerSubnet
+    runnerNsgName: resourceNames.runnerNsg
     tags: tags
   }
 }
@@ -144,7 +148,18 @@ module keyVault 'modules/keyvault.bicep' = {
   }
 }
 
-// 3. PostgreSQL Flexible Server
+// 3. Migration Identity (must precede postgres so outputs are available)
+module migrationIdentity 'modules/migration-identity.bicep' = {
+  params: {
+    location: location
+    managedIdentityName: '${environment}-uami-migration-${location}-${projectName}'
+    tags: tags
+    githubRepository: 'petro-konopelko/smartcafe-menu'
+    githubEnvironment: environment
+  }
+}
+
+// 4. PostgreSQL Flexible Server
 module postgres 'modules/postgresql.bicep' = {
   params: {
     location: location
@@ -156,6 +171,8 @@ module postgres 'modules/postgresql.bicep' = {
     storageSizeGB: postgresStorageSizeGB
     version: postgresVersion
     subnetId: network.outputs.databaseSubnetId
+    migrationUamiPrincipalId: migrationIdentity.outputs.principalId
+    migrationUamiName: migrationIdentity.outputs.name
     tags: tags
   }
 }
@@ -187,7 +204,7 @@ var appSettings = [
     value: keyVault.outputs.keyVaultUri
   }
   {
-    name: 'Cors__AllowedOrigins__AdminClient'
+    name: 'Cors__AllowedOrigins__Frontend'
     value: 'https://${adminClient.properties.defaultHostname}'
   }
 ]
@@ -333,3 +350,12 @@ output menuAppDeploymentIdentityClientId string = menuAppDeploymentIdentity.outp
 
 @description('Menu App Deployment Identity - Name')
 output menuAppDeploymentIdentityName string = menuAppDeploymentIdentity.outputs.managedIdentityName
+
+@description('Runner subnet resource ID — used by ACI migration job')
+output runnerSubnetId string = network.outputs.runnerSubnetId
+
+@description('Migration UAMI client ID — used by GitHub Actions OIDC token exchange for migrations')
+output migrationUamiClientId string = migrationIdentity.outputs.clientId
+
+@description('Migration UAMI name — display name of the Entra ID administrator on PostgreSQL')
+output migrationUamiName string = migrationIdentity.outputs.name

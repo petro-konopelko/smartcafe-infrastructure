@@ -36,6 +36,12 @@ param databaseSubnetName string
 @description('App NSG name')
 param appNsgName string
 
+@description('Runner subnet name (delegated to ACI for migration jobs)')
+param runnerSubnetName string
+
+@description('Runner NSG name')
+param runnerNsgName string
+
 @description('Resource tags')
 param tags ResourceTags
 
@@ -94,6 +100,23 @@ resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
           privateEndpointNetworkPolicies: 'Enabled'
         }
       }
+      {
+        name: runnerSubnetName
+        properties: {
+          addressPrefix: networkAddresses.runnerSubnetPrefix
+          delegations: [
+            {
+              name: 'delegation'
+              properties: {
+                serviceName: 'Microsoft.ContainerInstance/containerGroups'
+              }
+            }
+          ]
+          networkSecurityGroup: {
+            id: runnerNsg.id
+          }
+        }
+      }
     ]
   }
 }
@@ -145,6 +168,49 @@ resource appNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
   }
 }
 
+// NSG for Runner subnet (ACI migration jobs)
+resource runnerNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
+  name: runnerNsgName
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowPostgresOutbound'
+        properties: {
+          description: 'Allow outbound TCP 5432 to database subnet for PostgreSQL access'
+          priority: 200
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+
+          sourcePortRange: '*'
+          destinationPortRange: '5432'
+
+          sourceAddressPrefix: networkAddresses.runnerSubnetPrefix
+          destinationAddressPrefix: networkAddresses.databaseSubnetPrefix
+        }
+      }
+      {
+        name: 'DenyInternetOutbound'
+        properties: {
+          description: 'Deny all other outbound internet traffic from runner subnet'
+          priority: 4000
+          direction: 'Outbound'
+          access: 'Deny'
+          protocol: '*'
+
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: 'Internet'
+        }
+      }
+    ]
+  }
+}
+
 // ==================================================
 // OUTPUTS
 // ==================================================
@@ -158,5 +224,11 @@ output appSubnetId string = vnet.properties.subnets[0].id
 @description('Database subnet resource ID')
 output databaseSubnetId string = vnet.properties.subnets[1].id
 
+@description('Runner subnet resource ID')
+output runnerSubnetId string = vnet.properties.subnets[2].id
+
 @description('App NSG resource ID')
 output appNsgId string = appNsg.id
+
+@description('Runner NSG resource ID')
+output runnerNsgId string = runnerNsg.id
