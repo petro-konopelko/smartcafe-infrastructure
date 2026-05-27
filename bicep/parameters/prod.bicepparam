@@ -50,4 +50,5 @@ param networkAddresses = {
   vnetAddressPrefix: '10.2.0.0/16'
   databaseSubnetPrefix: '10.2.1.0/26'
   appSubnetPrefix: '10.2.2.0/24'
+  runnerSubnetPrefix: '10.2.3.0/27'
 }
