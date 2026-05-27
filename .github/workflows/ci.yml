@@ -15,6 +15,7 @@
 # - Azure Service Principal configured for OIDC authentication
 # - GitHub Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
 # - GitHub Secrets: POSTGRES_ADMIN_LOGIN, POSTGRES_ADMIN_PASSWORD
+# - GitHub Secrets: GH_TOKEN_MENU_REPO (PAT with variables:write on petro-konopelko/smartcafe-menu)
 # - GitHub Environments configured: dev, staging, prod
 # ==================================================
 
@@ -229,7 +230,10 @@ jobs:
           "appServiceName=$($outputObj.appServiceNames.value[0])" >> $env:GITHUB_OUTPUT
 
       # Propagate deployment outputs as GitHub Actions environment variables on smartcafe-menu
+      # Requires GH_TOKEN_MENU_REPO secret with variables:write permission on petro-konopelko/smartcafe-menu
+      # continue-on-error: true so a missing token does not fail the deployment itself
       - name: Propagate Variables to smartcafe-menu
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_MENU_REPO }}
         shell: pwsh

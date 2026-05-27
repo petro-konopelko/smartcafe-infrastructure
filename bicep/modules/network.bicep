@@ -187,7 +187,7 @@ resource runnerNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
           sourcePortRange: '*'
           destinationPortRange: '5432'
 
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: networkAddresses.runnerSubnetPrefix
           destinationAddressPrefix: networkAddresses.databaseSubnetPrefix
         }
       }
